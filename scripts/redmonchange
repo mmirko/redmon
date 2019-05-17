@@ -1,0 +1,40 @@
+#!/bin/bash
+
+REPO="/usr/local/metricrepo"
+
+usage() { echo "Usage: $0 [-k key] -s" 1>&2; exit 1; }
+
+s="no"
+
+while getopts ":k:s" o; do
+    case "${o}" in
+        k)
+            k=${OPTARG}
+            ;;
+        s)
+            s="yes"
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if [ -z "${k}" ]
+then
+    usage
+fi
+
+ALTERNATE=`echo ${k} | cut -d":" -f 1`
+METRIC=`echo ${k} | cut -d":" -f 2-`
+
+TMPF=`mktemp`
+redmonconfig -l -m $METRIC -a $ALTERNATE > $TMPF
+vi $TMPF
+cat $TMPF | redmonconfig -s -m $METRIC -a $ALTERNATE
+if [ ${s} == "yes" ]
+then
+	cp $TMPF $REPO/${k}
+fi
+rm $TMPF
