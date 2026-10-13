@@ -2,18 +2,20 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"time"
 
-	redmon "github.com/mmirko/redmon"
-	embredmon "github.com/mmirko/redmon/embredmon"
+	embredmon "github.com/mmirko/redmon/pkg/embredmon"
+	redmon "github.com/mmirko/redmon/pkg/redmon"
 
 	"log"
 	"os"
 	"strconv"
 
-	"github.com/gomodule/redigo/redis"
+	"github.com/redis/go-redis/v9"
 )
 
 func Debug(logline interface{}) {
@@ -84,32 +86,28 @@ func main() {
 		os.Exit(2)
 	}
 
-	c, err := redis.Dial("tcp", redmon_endpoint)
-	if err == nil {
-		Debug("Connection to Redis established")
-	} else {
+	db, err := strconv.Atoi(redmon_db)
+	if err != nil {
+		Alert("Invalid Redis database")
+		os.Exit(2)
+	}
+
+	ctx := context.Background()
+	c := redis.NewClient(&redis.Options{
+		Addr:     redmon_endpoint,
+		Password: redmon_key,
+		DB:       db,
+	})
+	if err := c.Ping(ctx).Err(); err != nil {
 		Alert(err)
 		os.Exit(2)
 	}
 	defer c.Close()
-
-	// Authentication
-
-	if _, ok := c.Do("AUTH", redmon_key); ok == nil {
+	Debug("Connection to Redis established")
+	if redmon_key != "" {
 		Debug("Authentication to Redis succeded")
-	} else {
-		Alert("Authentication to Redis failed")
-		os.Exit(2)
 	}
-
-	// Database selection
-
-	if _, ok := c.Do("SELECT", redmon_db); ok == nil {
-		Debug("Selected database " + redmon_db)
-	} else {
-		Alert("Database selection " + redmon_db + "Falied")
-		os.Exit(2)
-	}
+	Debug("Selected database " + redmon_db)
 
 	var key string
 
@@ -147,7 +145,7 @@ func main() {
 
 	switch {
 	case *list:
-		keys, err := redis.Strings(c.Do("KEYS", key+"*:redmon*"))
+		keys, err := c.Keys(ctx, key+"*:redmon*").Result()
 		if err != nil {
 			Alert("KEYS Falied")
 			os.Exit(2)
@@ -173,13 +171,12 @@ func main() {
 			sensor := new(redmon.SensorConfig)
 			if err := json.Unmarshal([]byte(configdata), sensor); err == nil {
 				value, _ := json.Marshal(sensor)
-				if _, err := c.Do("SET", key+":redmon", string(value)); err != nil {
+				if err := c.Set(ctx, key+":redmon", string(value), 0).Err(); err != nil {
 					Alert("SET key failed")
 					os.Exit(2)
 				} else {
 					if *ttl != 0 {
-						ttlS := strconv.Itoa(*ttl)
-						if _, err := c.Do("EXPIRE", key+":redmon", ttlS); err != nil {
+						if err := c.Expire(ctx, key+":redmon", time.Duration(*ttl)*time.Second).Err(); err != nil {
 							Alert("EXPIRE key failed")
 							os.Exit(2)
 						}
@@ -196,7 +193,7 @@ func main() {
 			Alert("Missing key")
 			os.Exit(2)
 		}
-		if value, err := redis.String(c.Do("GET", key+":redmon")); err == nil {
+		if value, err := c.Get(ctx, key+":redmon").Result(); err == nil {
 			if !json.Valid([]byte(value)) {
 				Alert("Invalid input json")
 				os.Exit(2)
@@ -219,14 +216,14 @@ func main() {
 			Alert("Missing key")
 			os.Exit(2)
 		}
-		if value, err := redis.String(c.Do("GET", key+":redmon")); err == nil {
+		if value, err := c.Get(ctx, key+":redmon").Result(); err == nil {
 			if !json.Valid([]byte(value)) {
 				Alert("Invalid input json")
 				os.Exit(2)
 			} else {
 				sensor := new(redmon.SensorConfig)
 				if err := json.Unmarshal([]byte(value), sensor); err == nil {
-					if _, err := c.Do("DEL", key+":redmon"); err == nil {
+					if err := c.Del(ctx, key+":redmon").Err(); err == nil {
 						Info("Key \"" + key + "\" removed succesfully")
 					} else {
 						Alert("Key remove failed")

@@ -1,5 +1,13 @@
 package redmon
 
+type RedmonConfig struct {
+	EmitDebug bool   `json:"debug"`
+	Verbose   bool   `json:"verbose"`
+	Endpoint  string `json:"endpoint"`
+	Key       string `json:"key"`
+	Db        int    `json:"db"`
+}
+
 type SensorConfig struct {
 	Name       string   `json:"name"`
 	Source     string   `json:"source"`
