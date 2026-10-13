@@ -2,6 +2,9 @@ package main
 
 import (
 	"flag"
+
+	"github.com/mmirko/redmon/pkg/embredmon"
+	"github.com/mmirko/redmon/pkg/redmon"
 )
 
 //////////////////////////////////////////////////////////////////// Application specific data
@@ -13,18 +16,6 @@ var (
 	configfile = flag.String("c", "", "Use a config file (default is to use the embedded config)")
 
 	source = flag.String("source", "", "Choose the redmon source")
-
-	fullkey   = flag.String("k", "", "Key (alternate + metric) to consider")
-	metric    = flag.String("m", "", "Metric to consider")
-	alternate = flag.String("a", "", "Specify an alterate metric prefix other than the hostname")
-
-	save   = flag.Bool("s", false, "Save configurations as json")
-	load   = flag.Bool("l", false, "Load configurations as josn")
-	remove = flag.Bool("r", false, "Remove a given metric")
-
-	ttl = flag.Int("t", 0, "Set the TTL for the metric config")
-
-	list = flag.Bool("f", false, "Full list all server metrics")
 )
 
 //////////////////////////////////////////////////////////////////// Initializzation
@@ -36,4 +27,21 @@ func init() {
 //////////////////////////////////////////////////////////////////// Main
 
 func main() {
+	// Load the configuration from the specified file or the embedded configuration
+	c, err := redmon.LoadConfig(*configfile, embredmon.Config)
+	if err != nil {
+		panic(err)
+	}
+
+	// Eventually, override the verbose and debug settings if specified
+	if *verbose {
+		c.Verbose = true
+	}
+	if *debug {
+		c.EmitDebug = true
+	}
+
+	// Print the loaded configuration if verbose mode is enabled
+	c.Info("Loaded configuration: " + c.String())
+
 }
